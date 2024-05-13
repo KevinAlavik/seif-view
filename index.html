@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEIF Viewer</title>
+</head>
+
+<body style="background-color:black;color:white;">
+    <input type="file" id="fileInput" accept=".seif">
+    <button onclick="loadSEIF()">View</button>
+    <br>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        function loadSEIF() {
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+
+            if (file) {
+                const reader = new FileReader();
+
+                reader.onload = function (e) {
+                    const arrayBuffer = e.target.result;
+                    const view = new DataView(arrayBuffer);
+
+                    const magic = readStringFromBuffer(view, 0, 4);
+                    if (magic !== "SEIF") {
+                        console.error("Invalid SEIF file format.");
+                        return;
+                    }
+
+                    const flags = view.getUint8(4);
+                    const encoding = view.getUint8(5);
+                    const signature = readStringFromBuffer(view, 6, 8);
+                    const width = view.getUint32(14, true);
+                    const height = view.getUint32(18, true);
+                    const chunkCount = view.getUint32(22, true);
+                    const chunkSize = view.getUint32(26, true);
+
+                    const imageData = new Uint8ClampedArray(width * height * 4);
+
+                    let offset = 30;
+                    let encoding_size = 0;
+
+                    if (encoding == 0x01)
+                        encoding_size = 4;
+                    if (encoding == 0x02)
+                        encoding_size = 3;
+                    if (encoding == 0x03)
+                        encoding_size = 4;
+
+                    let pixelIndex = 0;
+                    for (let i = 0; i < chunkSize * 3; i += 3) {
+                        if (encoding == 0x01) {
+                            imageData[pixelIndex++] = view.getUint8(offset + 0); // R
+                            imageData[pixelIndex++] = view.getUint8(offset + 1); // G
+                            imageData[pixelIndex++] = view.getUint8(offset + 2); // B
+                            imageData[pixelIndex++] = view.getUint8(offset + 3); // A
+                        } else if (encoding == 0x02) {
+                            imageData[pixelIndex++] = view.getUint8(offset + 0); // R
+                            imageData[pixelIndex++] = view.getUint8(offset + 1); // G
+                            imageData[pixelIndex++] = view.getUint8(offset + 2); // B
+                            imageData[pixelIndex++] = 255; // A
+                        } else if (encoding == 0x03) {
+                            imageData[pixelIndex++] = view.getUint8(offset + 3); // A
+                            imageData[pixelIndex++] = view.getUint8(offset + 1); // G
+                            imageData[pixelIndex++] = view.getUint8(offset + 2); // B
+                            imageData[pixelIndex++] = view.getUint8(offset + 0); // R
+
+                        } else {
+                            console.error("Invalid encoding! " + encoding);
+                        }
+                        offset += encoding_size;
+                    }
+
+                    const canvas = document.getElementById('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    const imageDataObj = new ImageData(imageData, width, height);
+                    ctx.putImageData(imageDataObj, 0, 0);
+                };
+
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert('Please select a .seif file.');
+            }
+        }
+
+        function readStringFromBuffer(view, offset, length) {
+            let str = '';
+            for (let i = 0; i < length; i++) {
+                const charCode = view.getUint8(offset + i);
+                if (charCode !== 0) {
+                    str += String.fromCharCode(charCode);
+                } else {
+                    break;
+                }
+            }
+            return str;
+        }
+    </script>
+</body>
+
+</html>
